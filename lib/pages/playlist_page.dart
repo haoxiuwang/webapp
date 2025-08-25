@@ -37,7 +37,8 @@ class _PlaylistPageState extends State<PlaylistPage> {
     try {
       final dirPath = await FilePicker.platform.getDirectoryPath();
       if (dirPath == null) return; // user canceled
-
+     
+      
       final dir = Directory(dirPath);
       if (!await dir.exists()) {
         _snack('Directory not found');
@@ -53,28 +54,33 @@ class _PlaylistPageState extends State<PlaylistPage> {
       await for (final entity in dir.list(recursive: false, followLinks: false)) {
         if (entity is! File) continue;
         final path = entity.path.toLowerCase();
-        if (path.endsWith('.mp3') || path.endsWith('.wav')) audio = entity;
-        else if (path.endsWith('.jpg')) cover = entity;
+      
+        if (path.endsWith('.mp3') || path.endsWith('.webm')||path.endsWith('.m4a')) audio = entity;
+        else if (path.endsWith('.jpg')||path.endsWith('.jpeg')||path.endsWith('.png')) cover = entity;
         else if (path.endsWith('.srt')) srt = entity;
         else if (path.endsWith('.json')) json = entity;
       }
-
+      
       if (audio == null || json == null) {
         _snack('Folder must contain an audio file and data.json');
         return;
       }
-
+    
+      final String str = await json!.readAsString();
+      
       // Parse metadata
-      final metaMap = jsonDecode(await json!.readAsString());
+      final metaMap = jsonDecode(str);
+      
       final String id = metaMap['id'].toString();
+      
       final String title = metaMap['title']?.toString() ?? id;
-
+      
       // Parse subtitles (optional)
       List<Map<String, dynamic>> subs = [];
       if (srt != null) {
         subs = parseSrt(await srt.readAsString());
       }
-
+      
       // Prepare app-owned storage per track
       final appDoc = await getApplicationDocumentsDirectory();
       final trackDir = Directory(p.join(appDoc.path, id));
@@ -164,8 +170,7 @@ class _PlaylistPageState extends State<PlaylistPage> {
                 final coverPath = (s['coverPath'] ?? '').toString();
                 return ListTile(
                   leading: coverPath.isNotEmpty && File(coverPath).existsSync()
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
+                      ? CircleAvatar(                          
                           child: Image.file(
                             File(coverPath),
                             width: 56,

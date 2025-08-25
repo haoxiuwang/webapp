@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
+import '../widgets/mylistview.dart';
+
 class PlayerPage extends StatefulWidget {
   final Map<String, dynamic> song;
   const PlayerPage({super.key, required this.song});
@@ -14,17 +16,46 @@ class PlayerPage extends StatefulWidget {
 
 class _PlayerPageState extends State<PlayerPage> {
   final AudioPlayer _player = AudioPlayer();
+  final ScrollController _controller = ScrollController();
   List<dynamic> _subs = [];
+  List<GlobalKey> _keys = [];
   int _activeIdx = -1;
+
 
   @override
   void initState() {
     super.initState();
     _init();
+   
   }
 
+  void _snack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+  void scrollToIndex(int index) {
+    if (index < 0 || index >= _subs.length) return;
+    final context = _keys[index].currentContext;
+    if (context == null) return;
+
+    Scrollable.ensureVisible(
+      context,
+      duration: const Duration(milliseconds: 400),
+      alignment: 0.5, // <-- always keep item in the center
+      curve: Curves.easeInOut,
+    );
+  }
+  int _findSubtitleIndex(Duration d) {
+    final t = d.inMilliseconds / 1000.0;
+    return _subs.indexWhere((s) => t >= (s['start'] as double) && t <= (s['end'] as double));
+  }
+
+
   Future<void> _init() async {
+   
     await _player.setFilePath(widget.song['audioPath']);
+    
+
     _subs = [];
     final raw = (widget.song['subtitles'] ?? '').toString();
     if (raw.isNotEmpty) {
@@ -37,13 +68,15 @@ class _PlayerPageState extends State<PlayerPage> {
               })
           .toList();
     }
-
+    _keys = List.generate(_subs.length, (_) => GlobalKey());
+    
     // Update active subtitle while playing
     _player.positionStream.listen((pos) {
       final t = pos.inMilliseconds / 1000.0; // seconds (double)
       final idx = _subs.indexWhere((s) => t >= (s['start'] as double) && t <= (s['end'] as double));
       if (idx != _activeIdx) {
         setState(() => _activeIdx = idx);
+        scrollToIndex(_activeIdx);
       }
     });
 
@@ -70,8 +103,8 @@ class _PlayerPageState extends State<PlayerPage> {
               icon: const Icon(Icons.replay_10),
               onPressed: () async {
                 final pos = await _player.position;
-                final newPos = Duration(seconds: (pos.inSeconds - 10).clamp(0, 1 << 31));
-                _player.seek(newPos);
+                final extra = const Duration(seconds: 10);
+                _player.seek(pos > extra?pos - extra:Duration.zero);
               },
             ),
             const SizedBox(width: 8),
@@ -92,6 +125,7 @@ class _PlayerPageState extends State<PlayerPage> {
               icon: const Icon(Icons.forward_10),
               onPressed: () async {
                 final pos = await _player.position;
+                
                 _player.seek(pos + const Duration(seconds: 10));
               },
             ),
@@ -110,10 +144,28 @@ class _PlayerPageState extends State<PlayerPage> {
         return Column(
           children: [
             Slider(
-              value: pos.inMilliseconds.toDouble(),
-              min: 0,
-              max: dur.inMilliseconds.clamp(1, 1 << 31).toDouble(),
-              onChanged: (v) => _player.seek(Duration(milliseconds: v.toInt())),
+              value: pos.inMilliseconds.toDouble().clamp(0, dur.inMilliseconds.toDouble()),
+              max: dur.inMilliseconds > 0 ? dur.inMilliseconds.toDouble() : 1,
+              onChanged: (value) {
+                // only seek, don’t scroll yet
+                // print(value);
+                final seekPos = Duration(milliseconds: value.toInt());
+                // print(seekPos);
+                
+                // _player.seek(seekPos);
+              },
+              onChangeEnd: (value) {
+                // after drag finished, scroll once to center active subtitle
+               
+                final seekPos = Duration(milliseconds: value.toInt());
+                
+                // final newIndex = _findSubtitleIndex(seekPos);
+                
+                _player.seek(const Duration(seconds: 2400));
+                // if (newIndex != -1) {
+                //   scrollToIndex(newIndex);
+                // }
+              },
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -131,6 +183,7 @@ class _PlayerPageState extends State<PlayerPage> {
     );
   }
 
+
   String _fmt(Duration d) {
     String two(int n) => n.toString().padLeft(2, '0');
     final h = d.inHours;
@@ -142,6 +195,7 @@ class _PlayerPageState extends State<PlayerPage> {
   @override
   Widget build(BuildContext context) {
     final coverPath = (widget.song['coverPath'] ?? '').toString();
+
     return Scaffold(
       appBar: AppBar(title: Text(widget.song['title'] ?? 'Player')),
       body: Column(
@@ -174,21 +228,29 @@ class _PlayerPageState extends State<PlayerPage> {
           const SizedBox(height: 8),
           Expanded(
             child: ListView.builder(
+              controller: _controller,
               itemCount: _subs.length,
               itemBuilder: (context, index) {
                 final s = _subs[index];
                 final active = index == _activeIdx;
                 return AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
+                  key: _keys[index],
+                  duration: const Duration(milliseconds: 1200),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Text(
-                    s['text'] ?? '',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: active ? 20 : 16,
-                      fontWeight: active ? FontWeight.bold : FontWeight.normal,
-                      color: active ? Colors.blue : Colors.black,
-                    ),
+                  child: TextButton(
+                    onPressed: (){                      
+                      int x = (s["start"]*1000).round();
+                      _player.seek(Duration(milliseconds: x));
+                    },
+                    child: Text(
+                      s['text'] ?? '',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: active ? 20 : 16,
+                        fontWeight: active ? FontWeight.bold : FontWeight.normal,
+                        color: active ? Colors.blue : Colors.black,
+                      )
+                    )
                   ),
                 );
               },

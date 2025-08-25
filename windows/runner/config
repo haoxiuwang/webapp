@@ -1,0 +1,14 @@
+Host github.com-hx
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/id_ed25519
+
+Host github.com-ff
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/fei
+
+Host github.com-xy
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/id_rsa_xy
